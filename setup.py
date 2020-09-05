@@ -5,7 +5,7 @@ with open("README.md") as fh:
 
 setuptools.setup(
     name="senttelegrammenu",
-    version="0.1.0",
+    version="0.1.1",
     author="Senteris",
     author_email="senteristeam@gmail.com",
     description="Superstructure over telebot which can show inline keyboard telegram menu",

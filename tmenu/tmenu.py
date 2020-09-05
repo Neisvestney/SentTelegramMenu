@@ -29,6 +29,9 @@ class TelegramMenu(telebot.TeleBot):
                     self.send_notification(
                         self.get_menu(call.message.chat.id)[0]['buttons'][call.data]['notification'], call.message.chat.id
                     )
+                elif 'func' in self.get_menu(call.message.chat.id)[0]['buttons'][call.data]:  # if func-button
+                    self.get_menu(call.message.chat.id)[0]['buttons'][call.data]['func'](call.message)
+                    self.answer_callback_query(call.id, "OK")
                 else:  # If submenu
                     self.get_user(call.message.chat.id).step.append(call.data)
                     self.edit_menu(call.message)

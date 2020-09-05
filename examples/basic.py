@@ -1,6 +1,12 @@
+import logging
 import os
 
+import telebot
+
 from tmenu import TelegramMenu
+
+logger = telebot.logger
+telebot.logger.setLevel(logging.INFO)
 
 bot = TelegramMenu(os.environ.get("TELEGRAM_TOKEN"), lambda: {
     'main': {
@@ -14,6 +20,10 @@ bot = TelegramMenu(os.environ.get("TELEGRAM_TOKEN"), lambda: {
             'send_notification': {
                 'button': 'Send Notification',
                 'notification': "Test Notification"
+            },
+            'function_button': {
+                'button': 'Print in terminal',
+                'func': lambda m: print(m.chat.id)
             }
         }
     }
