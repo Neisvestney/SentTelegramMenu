@@ -6,8 +6,15 @@
 
 Superstructure over [telebot](https://github.com/eternnoir/pyTelegramBotAPI)  which can show inline keyboard telegram menu
 ![Alt text](images/basicusage.gif "Basic usage")
+![Alt text](images/customuser.gif "Custom user")
 ## Examples
-- [Basic usage](examples/basic.py) 
+- [Basic usage](examples/basic.py)
+    - Submenu
+    - Notification button
+    - Function button
+ - [Custom user](examples/custom_user.py)
+    - Input
+    - Custom user class
 ## Installing
 [Project on PyPi](https://pypi.org/project/senttelegrammenu/)  
 Install: `pip install senttelegrammenu`  

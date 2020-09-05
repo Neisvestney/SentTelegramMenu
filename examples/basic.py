@@ -8,7 +8,7 @@ from tmenu import TelegramMenu
 logger = telebot.logger
 telebot.logger.setLevel(logging.INFO)
 
-bot = TelegramMenu(os.environ.get("TELEGRAM_TOKEN"), lambda: {
+bot = TelegramMenu(os.environ.get("TELEGRAM_TOKEN"), lambda message, user: {
     'main': {
         'text': 'Basic usage',
         'buttons': {
@@ -23,7 +23,7 @@ bot = TelegramMenu(os.environ.get("TELEGRAM_TOKEN"), lambda: {
             },
             'function_button': {
                 'button': 'Print in terminal',
-                'func': lambda m: print(m.chat.id)
+                'func': lambda m, u: print(m.chat.id)
             }
         }
     }

@@ -1,1 +1,1 @@
-from tmenu.tmenu import TelegramMenu
+from tmenu.tmenu import TelegramMenu, TelegramUser

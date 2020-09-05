@@ -4,7 +4,7 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 
 
-class TempUser:
+class TelegramUser:
     def __init__(self, chat_id, step, menu_id):
         self.menu_id = menu_id
         self.step = step
@@ -12,40 +12,69 @@ class TempUser:
 
 
 class TelegramMenu(telebot.TeleBot):
-    def __init__(self, token: str, schema: types.LambdaType, *args, **kwargs):
+    def __init__(self, token: str, schema: types.LambdaType, user_class=TelegramUser, *args, **kwargs):
         super(TelegramMenu, self).__init__(token, *args, **kwargs)
 
         self.schema = schema
+        self.user_class = user_class
         self.users = list()
 
         @self.callback_query_handler(func=lambda call: True)
         def callback_query(call):
             if self.get_user(call.message.chat.id).step:
+                menu = self.get_menu(call.message.chat.id)[0]['buttons'][call.data]
+
                 if call.data == 'back':  # If button 'back
                     del self.get_user(call.message.chat.id).step[-1]
                     self.edit_menu(call.message)
-                elif 'notification' in self.get_menu(call.message.chat.id)[0]['buttons'][call.data]:  # if notif-button
+                elif 'notification' in menu:  # if notif-button
                     # self.answer_callback_query(call.id, "OK")
-                    self.send_notification(
-                        self.get_menu(call.message.chat.id)[0]['buttons'][call.data]['notification'], call.message.chat.id
-                    )
-                elif 'func' in self.get_menu(call.message.chat.id)[0]['buttons'][call.data]:  # if func-button
-                    self.get_menu(call.message.chat.id)[0]['buttons'][call.data]['func'](call.message)
+                    self.send_notification(menu['notification'], call.message.chat.id)
+                elif 'func' in menu:  # if func-button
+                    menu['func'](call.message, self.get_user(call.message.chat.id))
                     self.answer_callback_query(call.id, "OK")
+                elif 'input' in menu:  # if input-button
+                    self.get_user(call.message.chat.id).step.append(call.data)
+                    self.send_message(call.message.chat.id, menu['input']['text'])
+                    self.delete_menu(call.message.chat.id)
                 else:  # If submenu
                     self.get_user(call.message.chat.id).step.append(call.data)
                     self.edit_menu(call.message)
 
-    def get_user(self, chat_id) -> TempUser:
+        @self.message_handler(func=lambda m: 'input' in self.get_menu(m.chat.id)[0])
+        def get_text(message):
+            menu = self.get_menu(message.chat.id)[0]['input']
+            user = self.get_user(message.chat.id)
+
+            del user.step[-1]
+
+            if 'field' in menu:
+                if hasattr(user, f"{menu['field']}_validation"):
+                    text, value = user.__getattribute__(f"{menu['field']}_validation")(message.text)
+                    if text is not None:
+                        self.send_notification(text, message.chat.id)
+                    else:
+                        user.__setattr__(menu['field'], value)
+                        self.send_menu(message.chat.id)
+                else:
+                        user.__setattr__(menu['field'], message.text)
+                        self.send_menu(message.chat.id)
+            else:
+                menu['func'](message.text)
+                self.send_menu(message.chat.id)
+
+    def get_user(self, chat_id) -> TelegramUser:
         if len(list(filter(lambda x: x.chat_id == chat_id, self.users))) == 0:
-            self.users.append(TempUser(chat_id, None, None))
+            self.users.append(self.user_class(chat_id, None, None))
         return list(filter(lambda x: x.chat_id == chat_id, self.users))[0]
 
     def get_menu(self, chat_id):
         # Возращает текст и клавиатуру меню
         steps = self.get_user(chat_id).step
+        if steps is None:
+            return [[], None]
 
-        menu = self.schema()
+        menu = self.schema(chat_id, self.get_user(chat_id))
 
         menu = menu[steps[0]]
         for step in steps[1:]:
@@ -76,6 +105,10 @@ class TelegramMenu(telebot.TeleBot):
         menu, markup = self.get_menu(message.chat.id)
         self.edit_message_text(menu['text'], message.chat.id, message.message_id, reply_markup=markup)
 
+    def delete_menu(self, chat_id):
+        self.delete_message(chat_id, self.get_user(chat_id).menu_id)
+        self.get_user(chat_id).menu_id = None
+
     def send_notification(self, text, chat_id):
         """
         Send to chat message and resend menu
@@ -83,6 +116,6 @@ class TelegramMenu(telebot.TeleBot):
         :param text Text for sending
         :param chat_id Id of chat with user
         """
-        self.delete_message(chat_id, self.get_user(chat_id).menu_id)
+        self.delete_menu(chat_id) if self.get_user(chat_id).menu_id is not None else None
         self.send_message(chat_id, text)
         self.send_menu(chat_id)
