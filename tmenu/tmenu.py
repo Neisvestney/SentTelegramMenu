@@ -1,3 +1,5 @@
+import os
+import pickle
 import types
 
 import telebot
@@ -12,12 +14,15 @@ class TelegramUser:
 
 
 class TelegramMenu(telebot.TeleBot):
-    def __init__(self, token: str, schema: types.LambdaType, user_class=TelegramUser, *args, **kwargs):
+    def __init__(self, token: str, schema: types.LambdaType, user_class=TelegramUser, save_file='save.dat', *args, **kwargs):
         super(TelegramMenu, self).__init__(token, *args, **kwargs)
 
         self.schema = schema
         self.user_class = user_class
+        self.save_file = save_file
         self.users = list()
+
+        self.load()
 
         @self.callback_query_handler(func=lambda call: True)
         def callback_query(call):
@@ -41,6 +46,8 @@ class TelegramMenu(telebot.TeleBot):
                     self.get_user(call.message.chat.id).step.append(call.data)
                     self.edit_menu(call.message)
 
+                self.save()
+
         @self.message_handler(func=lambda m: 'input' in self.get_menu(m.chat.id)[0])
         def get_text(message):
             menu = self.get_menu(message.chat.id)[0]['input']
@@ -63,15 +70,16 @@ class TelegramMenu(telebot.TeleBot):
                 menu['func'](message.text)
                 self.send_menu(message.chat.id)
 
+            self.save()
+
     def get_user(self, chat_id) -> TelegramUser:
         if len(list(filter(lambda x: x.chat_id == chat_id, self.users))) == 0:
             self.users.append(self.user_class(chat_id, None, None))
         return list(filter(lambda x: x.chat_id == chat_id, self.users))[0]
 
     def get_menu(self, chat_id):
-        # Возращает текст и клавиатуру меню
         steps = self.get_user(chat_id).step
-        if steps is None:
+        if steps is None or len(steps) == 0:
             return [[], None]
 
         menu = self.schema(chat_id, self.get_user(chat_id))
@@ -97,6 +105,7 @@ class TelegramMenu(telebot.TeleBot):
         """
         if menu is not None:
             self.get_user(chat_id).step = menu
+            self.save()
 
         menu, markup = self.get_menu(chat_id)
         self.get_user(chat_id).menu_id = self.send_message(chat_id, menu['text'], reply_markup=markup).message_id
@@ -119,3 +128,23 @@ class TelegramMenu(telebot.TeleBot):
         self.delete_menu(chat_id) if self.get_user(chat_id).menu_id is not None else None
         self.send_message(chat_id, text)
         self.send_menu(chat_id)
+
+    def save(self):
+        """
+        Save users to file 'save_file'
+        """
+        if self.save_file is not None:
+            with open(self.save_file, 'wb') as f:
+                pickle.dump({'users': self.users}, f)
+
+    def load(self):
+        """
+        Load users from file 'save_file'
+        :return TelegramMenu
+        """
+        if self.save_file is not None and os.path.exists(self.save_file):
+            with open(self.save_file, 'rb') as f:
+                save = pickle.load(f)
+                self.users = save['users']
+
+        return self
