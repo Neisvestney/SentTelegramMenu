@@ -3,6 +3,7 @@ import pickle
 import types
 
 import telebot
+from telebot.apihelper import ApiTelegramException
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 
 
@@ -14,12 +15,14 @@ class TelegramUser:
 
 
 class TelegramMenu(telebot.TeleBot):
-    def __init__(self, token: str, schema: types.LambdaType, user_class=TelegramUser, save_file='save.dat', *args, **kwargs):
+    def __init__(self, token: str, schema: types.LambdaType, user_class=TelegramUser, database_class=None, save_file='save.dat', *args, **kwargs):
         super(TelegramMenu, self).__init__(token, *args, **kwargs)
 
         self.schema = schema
         self.user_class = user_class
         self.save_file = save_file
+
+        self.database = database_class() if database_class is not None else None
         self.users = list()
 
         self.load()
@@ -56,17 +59,10 @@ class TelegramMenu(telebot.TeleBot):
             del user.step[-1]
 
             if 'field' in menu:
-                if hasattr(user, f"{menu['field']}_validation"):
-                    text, value = user.__getattribute__(f"{menu['field']}_validation")(message.text)
-                    if text is not None:
-                        self.send_notification(text, message.chat.id)
-                    else:
-                        user.__setattr__(menu['field'], value)
-                        self.send_menu(message.chat.id)
-                else:
-                        user.__setattr__(menu['field'], message.text)
-                        self.send_menu(message.chat.id)
-            else:
+                self._set_with_validation(user, menu, 'field', message)
+            elif 'db_field' in menu:
+                self._set_with_validation(self.database, menu, 'db_field', message)
+            elif 'func' in menu:
                 menu['func'](message.text)
                 self.send_menu(message.chat.id)
 
@@ -79,7 +75,7 @@ class TelegramMenu(telebot.TeleBot):
 
     def get_menu(self, chat_id):
         steps = self.get_user(chat_id).step
-        if steps is None or len(steps) == 0:
+        if steps is None or len(steps) == 0 or type(steps) is str:
             return [[], None]
 
         menu = self.schema(chat_id, self.get_user(chat_id))
@@ -106,6 +102,12 @@ class TelegramMenu(telebot.TeleBot):
         if menu is not None:
             self.get_user(chat_id).step = menu
             self.save()
+
+        if self.get_user(chat_id).menu_id is not None:
+            try:
+                self.delete_message(chat_id, self.get_user(chat_id).menu_id)
+            except ApiTelegramException:
+                pass
 
         menu, markup = self.get_menu(chat_id)
         self.get_user(chat_id).menu_id = self.send_message(chat_id, menu['text'], reply_markup=markup).message_id
@@ -135,7 +137,7 @@ class TelegramMenu(telebot.TeleBot):
         """
         if self.save_file is not None:
             with open(self.save_file, 'wb') as f:
-                pickle.dump({'users': self.users}, f)
+                pickle.dump({'users': self.users, 'database': self.database}, f)
 
     def load(self):
         """
@@ -146,5 +148,18 @@ class TelegramMenu(telebot.TeleBot):
             with open(self.save_file, 'rb') as f:
                 save = pickle.load(f)
                 self.users = save['users']
+                self.database = save['database']
 
         return self
+
+    def _set_with_validation(self, obj, menu, field, message):
+        if hasattr(obj, f"{menu[field]}_validation"):
+            text, value = getattr(obj, f"{menu[field]}_validation")(message.text)
+            if text is not None:
+                self.send_notification(text, message.chat.id)
+            else:
+                setattr(obj, menu[field], value)
+                self.send_menu(message.chat.id)
+        else:
+            setattr(obj, menu[field], message.text)
+            self.send_menu(message.chat.id)
